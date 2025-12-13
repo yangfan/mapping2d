@@ -29,7 +29,7 @@ find_package(Ceres REQUIRED)
 
 set(G2O_ROOT "/home/fan/ssd/study/slambook2/3rdparty/g2o/install")
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-Find_Package(G2O REQUIRED)
+find_Package(G2O REQUIRED)
 message(STATUS "g2o include: ${G2O_INCLUDE_DIR}")
 message(STATUS "g2o core: ${G2O_CORE_LIBRARY}")
 

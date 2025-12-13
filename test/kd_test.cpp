@@ -46,7 +46,6 @@ TEST(KDTest, BasicBuild3d) {
 
   KDTree<double, 3> kd_tree;
   kd_tree.setInputCloud(cloud);
-  //   kd_tree.print();
 
   EXPECT_EQ(kd_tree.node_size(), 7);
   EXPECT_EQ(kd_tree.leaf_size(), cloud.size());

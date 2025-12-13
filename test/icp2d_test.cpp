@@ -118,8 +118,6 @@ TEST(ICP2DTest, G2oVsCeres) {
                 (pose_g2o.translation() - pose_ceres.translation()).norm();
             const double angle_diff =
                 (pose_g2o.so2().log() - pose_ceres.so2().log());
-            // EXPECT_LE(trans_diff, 0.15);
-            // EXPECT_LE(angle_diff, 0.1);
             max_translation = std::max(max_translation, trans_diff);
             max_angle = std::max(max_angle, angle_diff);
             last_scan = scan;

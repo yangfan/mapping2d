@@ -18,7 +18,6 @@ void Visualize2dScan(const sensor_msgs::msg::LaserScan scan,
   };
   for (size_t i = 0; i < scan.ranges.size(); ++i) {
     const double angle = scan.angle_min + scan.angle_increment * i;
-    // if (angle < scan.angle_min || angle > scan.angle_max ||
     if (angle < scan.angle_min + 30 * M_PI / 180.0 ||
         angle > scan.angle_max - 30 * M_PI / 180.0 ||
         scan.ranges[i] < scan.range_min || scan.ranges[i] > scan.range_max) {
