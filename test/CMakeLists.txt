@@ -12,5 +12,9 @@ add_executable(icp2d_test icp2d_test.cpp)
 target_link_libraries(icp2d_test PUBLIC gtest glog::glog bag_io visualizer icp2d ${GFLAGS_LIBRARIES})
 target_include_directories(icp2d_test PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)
 
+add_executable(icp2dp2l_test icp2dp2l_test.cpp)
+target_link_libraries(icp2dp2l_test PUBLIC gtest glog::glog bag_io visualizer icp2d ${GFLAGS_LIBRARIES})
+target_include_directories(icp2dp2l_test PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)
+
 include(GoogleTest)
 gtest_discover_tests(utils_test kd_test icp2d_test)

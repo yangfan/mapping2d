@@ -77,7 +77,7 @@ bool P2PGN(const sensor_msgs::msg::LaserScan &target,
       if (!kdtree.nearest_neighbors(query_pt, 1, tidx, tdist)) {
         continue;
       }
-      if (tdist[0] > kmax_dist) {
+      if (tdist[0] > kmax_p2p_dist2) {
         continue;
       }
 
@@ -200,6 +200,89 @@ bool P2PCeres(const sensor_msgs::msg::LaserScan &target,
   }
   Tts = Sophus::SE2d(pose[2], Eigen::Vector2d(pose[0], pose[1]));
 
+  return true;
+}
+
+bool P2LGN(const sensor_msgs::msg::LaserScan &target,
+           const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+           const size_t iterations, bool verbose) {
+  if (target.ranges.empty() || source.ranges.empty()) {
+    return false;
+  }
+  KDTree kdtree;
+  setKDTree(kdtree, target);
+
+  auto Jacobian = [](const Sophus::SE2d &pose, const double range,
+                     const double angle, const Eigen::Vector3d &line_coeffs) {
+    return Eigen::Matrix<double, 1, 3>(
+        line_coeffs[0], line_coeffs[1],
+        -line_coeffs[0] * range * std::sin(pose.so2().log() + angle) +
+            line_coeffs[1] * range * std::cos(pose.so2().log() + angle));
+  };
+
+  Sophus::SE2d pose = Tts;
+  double last_err = std::numeric_limits<double>::max();
+
+  for (size_t i = 0; i < iterations; ++i) {
+    Eigen::Matrix3d H = Eigen::Matrix3d::Zero();
+    Eigen::Vector3d b = Eigen::Vector3d::Zero();
+    size_t valid_cnt = 0;
+    double curr_err = 0;
+
+    for (size_t sid = 0; sid < source.ranges.size(); ++sid) {
+      const double range = source.ranges[sid];
+      const double angle = source.angle_min + sid * source.angle_increment;
+      if (range < source.range_min || range > source.range_max ||
+          angle < source.angle_min + 30 * M_PI / 180 ||
+          angle > source.angle_max - 30 * M_PI / 180) {
+        continue;
+      }
+      const Point query_pt = pose * scan2point(range, angle);
+      std::vector<int> nidx;
+      std::vector<double> ndist;
+      kdtree.nearest_neighbors(query_pt, kmax_p2l_num, nidx, ndist);
+
+      std::vector<Point> matched_pts;
+      matched_pts.reserve(kmax_p2l_num);
+      for (size_t nid = 0; nid < ndist.size(); ++nid) {
+        if (ndist[nid] > 3 * kmax_p2p_dist2 || nidx[nid] == kno_match) {
+          continue;
+        }
+        matched_pts.emplace_back(kdtree.get_point(nidx[nid]));
+      }
+
+      Eigen::Vector3d line_coeffs;
+      if (!line_fitting(matched_pts, line_coeffs)) {
+        continue;
+      }
+
+      const double err = line_coeffs[0] * query_pt.x() +
+                         line_coeffs[1] * query_pt.y() + line_coeffs[2];
+      curr_err += err * err;
+      const Eigen::Matrix<double, 1, 3> J =
+          Jacobian(pose, range, angle, line_coeffs);
+      H += J.transpose() * J;
+      b += -J.transpose() * err;
+      valid_cnt++;
+    }
+    if (valid_cnt < kmin_valid) {
+      LOG(ERROR) << "Not enough valid point: " << valid_cnt;
+      return false;
+    }
+    const double avg_err = curr_err / valid_cnt;
+    Eigen::Vector3d delta = H.ldlt().solve(b);
+    if (avg_err > last_err || std::isnan(delta[0])) {
+      break;
+    }
+    pose.translation() += delta.head<2>();
+    pose.so2() = pose.so2() * Sophus::SO2d::exp(delta[2]);
+
+    if (verbose) {
+      LOG(INFO) << "Iter " << i << " err: " << avg_err;
+    }
+    last_err = avg_err;
+  }
+  Tts = pose;
   return true;
 }
 
