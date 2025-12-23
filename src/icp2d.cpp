@@ -142,7 +142,7 @@ bool P2PG2o(const sensor_msgs::msg::LaserScan &target,
 
       continue;
     }
-    EdgeScan2D *edge = new EdgeScan2D(&kdtree);
+    EdgeP2P *edge = new EdgeP2P(&kdtree);
     edge->setVertex(0, vertex);
     edge->setMeasurement(Eigen::Vector2d(range, angle));
     edge->setInformation(Eigen::Matrix2d::Identity());
@@ -182,7 +182,7 @@ bool P2PCeres(const sensor_msgs::msg::LaserScan &target,
         angle > source.angle_max - 30 * M_PI / 180.0) {
       continue;
     }
-    ceres::CostFunction *cost_func = new ICP2DCeres(range, angle, &kdtree);
+    ceres::CostFunction *cost_func = new ICP2DCeresP2P(range, angle, &kdtree);
     ceres::LossFunction *loss_func = new ceres::HuberLoss(khb_delta);
     problem.AddResidualBlock(cost_func, loss_func, pose);
   }
@@ -283,6 +283,227 @@ bool P2LGN(const sensor_msgs::msg::LaserScan &target,
     last_err = avg_err;
   }
   Tts = pose;
+  return true;
+}
+
+bool P2LG2o(const sensor_msgs::msg::LaserScan &target,
+            const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+            const size_t iterations, bool verbose) {
+  if (target.ranges.empty() || source.ranges.empty()) {
+    return false;
+  }
+  KDTree kdtree;
+  if (!setKDTree(kdtree, target)) {
+    return false;
+  }
+
+  using BlockSolver = g2o::BlockSolver<g2o::BlockSolverTraits<3, 1>>;
+  using LinearSolver = g2o::LinearSolverEigen<BlockSolver::PoseMatrixType>;
+  g2o::OptimizationAlgorithmLevenberg *solver =
+      new g2o::OptimizationAlgorithmLevenberg(
+          std::make_unique<BlockSolver>(std::make_unique<LinearSolver>()));
+
+  g2o::SparseOptimizer optimizer;
+  optimizer.setAlgorithm(solver);
+
+  VertexSE2 *vertex = new VertexSE2();
+  vertex->setEstimate(Tts);
+  vertex->setId(0);
+  optimizer.addVertex(vertex);
+
+  size_t eid = 0;
+  for (size_t sid = 0; sid < source.ranges.size(); ++sid) {
+    const double range = source.ranges[sid];
+    const double angle = source.angle_min + sid * source.angle_increment;
+    if (range < source.range_min || range > source.range_max ||
+        angle < source.angle_min + 30 * M_PI / 180 ||
+        angle > source.angle_max - 30 * M_PI / 180) {
+      continue;
+    }
+    EdgeP2L *edge = new EdgeP2L(&kdtree);
+    edge->setVertex(0, vertex);
+    edge->setMeasurement(Eigen::Vector2d(range, angle));
+    edge->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
+    edge->setId(eid++);
+    auto *hb_kernal = new g2o::RobustKernelHuber();
+    hb_kernal->setDelta(khb_delta);
+    edge->setRobustKernel(hb_kernal);
+    optimizer.addEdge(edge);
+  }
+  optimizer.setVerbose(verbose);
+  optimizer.initializeOptimization();
+  optimizer.optimize(iterations);
+
+  Tts = vertex->estimate();
+
+  return true;
+}
+
+bool P2LG2oMT(const sensor_msgs::msg::LaserScan &target,
+              const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+              const size_t iterations, bool verbose) {
+  if (target.ranges.empty() || source.ranges.empty()) {
+    return false;
+  }
+  KDTree kdtree;
+  if (!setKDTree(kdtree, target)) {
+    return false;
+  }
+  using BlockSolverType =
+      g2o::BlockSolver<g2o::BlockSolverTraits<3, Eigen::Dynamic>>;
+  using LinearSolverType =
+      g2o::LinearSolverEigen<BlockSolverType::PoseMatrixType>;
+  auto *solver = new g2o::OptimizationAlgorithmLevenberg(
+      std::make_unique<BlockSolverType>(std::make_unique<LinearSolverType>()));
+  g2o::SparseOptimizer optimizer;
+  optimizer.setAlgorithm(solver);
+
+  VertexSE2 *vertex = new VertexSE2();
+  vertex->setEstimate(Tts);
+  vertex->setId(0);
+  optimizer.addVertex(vertex);
+
+  std::vector<double> ranges;
+  std::vector<double> angles;
+  ranges.reserve(source.ranges.size());
+  angles.reserve(source.ranges.size());
+  int cnt = 0;
+  for (size_t sid = 0; sid < source.ranges.size(); ++sid) {
+    const double range = source.ranges[sid];
+    const double angle = source.angle_min + sid * source.angle_increment;
+    if (range < source.range_min || range > source.range_max ||
+        angle < source.angle_min + 30 * M_PI / 180 ||
+        angle > source.angle_max - 30 * M_PI / 180) {
+      continue;
+    }
+    ranges.emplace_back(range);
+    angles.emplace_back(angle);
+    cnt++;
+  }
+
+  EdgeP2LMT *edge = new EdgeP2LMT(std::move(ranges), std::move(angles));
+  edge->setVertex(0, vertex);
+  edge->setId(0);
+  edge->setMeasurement(&kdtree);
+  edge->setInformation(Eigen::MatrixXd::Identity(cnt, cnt));
+  auto *huber = new g2o::RobustKernelHuber();
+  huber->setDelta(khb_delta);
+  edge->setRobustKernel(huber);
+  optimizer.addEdge(edge);
+
+  optimizer.initializeOptimization();
+  optimizer.setVerbose(verbose);
+  optimizer.optimize(iterations);
+
+  Tts = vertex->estimate();
+
+  return true;
+}
+
+bool P2LCeres(const sensor_msgs::msg::LaserScan &target,
+              const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+              const size_t iterations, bool verbose) {
+  if (target.ranges.empty() || source.ranges.empty()) {
+    return false;
+  }
+  KDTree kdtree;
+  if (!setKDTree(kdtree, target)) {
+    return false;
+  }
+  ceres::Problem problem;
+  double pose[3] = {Tts.translation().x(), Tts.translation().y(),
+                    Tts.so2().log()};
+
+  size_t valid_cnt = 0;
+  for (size_t sid = 0; sid < source.ranges.size(); ++sid) {
+    const double range = source.ranges[sid];
+    const double angle = source.angle_min + sid * source.angle_increment;
+    if (range < source.range_min || range > source.range_max ||
+        angle < source.angle_min + 30 * M_PI / 180 ||
+        angle > source.angle_max - 30 * M_PI / 180) {
+      continue;
+    }
+
+    ceres::CostFunction *cost_func = new ICP2DCeresP2L(range, angle, &kdtree);
+    ceres::LossFunction *loss_func = new ceres::HuberLoss(khb_delta);
+    problem.AddResidualBlock(cost_func, loss_func, pose);
+    valid_cnt++;
+  }
+  if (valid_cnt < kmin_valid) {
+    LOG(WARNING) << "Not enough valid points.";
+    return true;
+  }
+
+  ceres::Solver::Options options;
+  options.minimizer_progress_to_stdout = verbose;
+  options.trust_region_strategy_type =
+      ceres::TrustRegionStrategyType::LEVENBERG_MARQUARDT;
+  options.linear_solver_type = ceres::LinearSolverType::SPARSE_SCHUR;
+  options.max_num_iterations = iterations;
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+  if (verbose) {
+    LOG(INFO) << summary.FullReport();
+  }
+
+  Tts = Sophus::SE2d(pose[2], Eigen::Vector2d(pose[0], pose[1]));
+
+  return true;
+}
+
+bool P2LCeresMT(const sensor_msgs::msg::LaserScan &target,
+                const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+                const size_t iterations, bool verbose) {
+  if (target.ranges.empty() || source.ranges.empty()) {
+    return false;
+  }
+  KDTree kdtree;
+  if (!setKDTree(kdtree, target)) {
+    return false;
+  }
+
+  std::vector<double> ranges, angles;
+  ranges.reserve(source.ranges.size());
+  angles.reserve(source.ranges.size());
+  for (size_t sid = 0; sid < source.ranges.size(); ++sid) {
+    const double range = source.ranges[sid];
+    const double angle = source.angle_min + sid * source.angle_increment;
+    if (range < source.range_min || range > source.range_max ||
+        angle < source.angle_min + 30 * M_PI / 180 ||
+        angle > source.angle_max - 30 * M_PI / 180) {
+      continue;
+    }
+    ranges.emplace_back(range);
+    angles.emplace_back(angle);
+  }
+  if (ranges.size() < kmin_valid) {
+    LOG(WARNING) << "Not enough valid points.";
+    return true;
+  }
+
+  double pose[3] = {Tts.translation().x(), Tts.translation().y(),
+                    Tts.so2().log()};
+
+  ceres::Problem problem;
+  ceres::CostFunction *cost_func =
+      new ICP2DCeresP2LMT(std::move(ranges), std::move(angles), &kdtree);
+  ceres::LossFunction *loss_func = new ceres::HuberLoss(khb_delta);
+  problem.AddResidualBlock(cost_func, loss_func, pose);
+
+  ceres::Solver::Options options;
+  options.minimizer_progress_to_stdout = verbose;
+  options.trust_region_strategy_type =
+      ceres::TrustRegionStrategyType::LEVENBERG_MARQUARDT;
+  options.linear_solver_type = ceres::LinearSolverType::SPARSE_SCHUR;
+  options.max_num_iterations = iterations;
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+  if (verbose) {
+    LOG(INFO) << summary.FullReport();
+  }
+
+  Tts = Sophus::SE2d(pose[2], Eigen::Vector2d(pose[0], pose[1]));
+
   return true;
 }
 

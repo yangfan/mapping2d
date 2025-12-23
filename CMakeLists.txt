@@ -26,6 +26,7 @@ find_package(glog REQUIRED)
 find_package(PCL REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(OpenCV REQUIRED)
 
 set(G2O_ROOT "/home/fan/ssd/study/slambook2/3rdparty/g2o/install")
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)

@@ -16,5 +16,9 @@ add_executable(icp2dp2l_test icp2dp2l_test.cpp)
 target_link_libraries(icp2dp2l_test PUBLIC gtest glog::glog bag_io visualizer icp2d ${GFLAGS_LIBRARIES})
 target_include_directories(icp2dp2l_test PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)
 
+add_executable(likelihood_test likelihood_test.cpp)
+target_link_libraries(likelihood_test PRIVATE gtest glog::glog ${GFLAGS_LIBRARIES} likelihood_field bag_io visualizer)
+target_include_directories(likelihood_test PRIVATE ${CMAKE_SOURCE_DIR}/include/mapping2d)
+
 include(GoogleTest)
 gtest_discover_tests(utils_test kd_test icp2d_test)

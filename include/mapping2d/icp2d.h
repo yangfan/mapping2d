@@ -14,7 +14,7 @@ constexpr size_t kmin_valid = 20;
 constexpr double khb_delta = 0.8;
 constexpr int kmax_p2l_num = 5;
 
-enum class OptimizerType { G2o, Ceres, GN };
+enum class OptimizerType { G2o, G2oMT, Ceres, CeresMT, GN };
 
 inline Point scan2point(const double range, const double angle) {
   return Point(range * std::cos(angle), range * std::sin(angle));
@@ -75,19 +75,40 @@ bool P2LGN(const sensor_msgs::msg::LaserScan &target,
            const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
            const size_t iterations = 10, bool verbose = true);
 
+bool P2LG2o(const sensor_msgs::msg::LaserScan &target,
+            const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+            const size_t iterations = 10, bool verbose = true);
+
+bool P2LG2oMT(const sensor_msgs::msg::LaserScan &target,
+              const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+              const size_t iterations = 10, bool verbose = true);
+
+bool P2LCeres(const sensor_msgs::msg::LaserScan &target,
+              const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+              const size_t iterations = 10, bool verbose = true);
+
+bool P2LCeresMT(const sensor_msgs::msg::LaserScan &target,
+                const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
+                const size_t iterations = 10, bool verbose = true);
+
 inline bool P2L(const sensor_msgs::msg::LaserScan &target,
                 const sensor_msgs::msg::LaserScan &source, Sophus::SE2d &Tts,
                 const size_t iterations = 10, bool verbose = true,
                 OptimizerType opt_type = OptimizerType::GN) {
   switch (opt_type) {
-  // case OptimizerType::G2o:
-  //   return P2LG2o(target, source, Tts, iterations, verbose);
-  // case OptimizerType::Ceres:
-  //   return P2LCeres(target, source, Tts, iterations, verbose);
+  case OptimizerType::G2o:
+    return P2LG2o(target, source, Tts, iterations, verbose);
+  case OptimizerType::G2oMT:
+    return P2LG2oMT(target, source, Tts, iterations, verbose);
+  case OptimizerType::Ceres:
+    return P2LCeres(target, source, Tts, iterations, verbose);
+  case OptimizerType::CeresMT:
+    return P2LCeresMT(target, source, Tts, iterations, verbose);
   case OptimizerType::GN:
     return P2LGN(target, source, Tts, iterations, verbose);
   default:
-    LOG(ERROR) << "Please select one of the optimizer types: G2o, Ceres, GN.";
+    LOG(ERROR) << "Please select one of the optimizer types: G2o, G2oMT, "
+                  "Ceres, CeresMT, GN.";
     return false;
   }
   return false;

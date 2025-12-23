@@ -12,6 +12,11 @@ void Visualize2dScan(const sensor_msgs::msg::LaserScan scan,
   if (!img.data) {
     img = cv::Mat(img_size, img_size, CV_8UC3, cv::Vec3b(255, 255, 255));
   }
+  if (img.type() == CV_8UC1) {
+    cv::Mat imgc;
+    cv::cvtColor(img, imgc, cv::COLOR_GRAY2RGB);
+    img = imgc;
+  }
   auto pos2img = [&img_size, &resolution](const Eigen::Vector2d pos) {
     return Eigen::Vector2i(pos.x() * resolution + 0.5 * img_size,
                            pos.y() * resolution + 0.5 * img_size);

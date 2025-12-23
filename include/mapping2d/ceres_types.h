@@ -5,42 +5,67 @@
 #include <vector>
 
 #include "KDTree.hpp"
-#include "icp2d.h"
+#include "LikelihoodField.h"
 
-class ICP2DCeres : public ceres::SizedCostFunction<2, 3> {
+class ICP2DCeresP2P : public ceres::SizedCostFunction<2, 3> {
 public:
-  ICP2DCeres(const double range, const double angle, KDTree<double, 2> *kdtree)
+  ICP2DCeresP2P(const double range, const double angle,
+                KDTree<double, 2> *kdtree)
       : range_(range), angle_(angle), kdtree_(kdtree) {}
 
   bool Evaluate(double const *const *params, double *residuals,
-                double **jacobian) const override {
-    Sophus::SE2d pose(params[0][2],
-                      Eigen::Vector2d(params[0][0], params[0][1]));
-    ICP2D::Point query_pt = pose * ICP2D::scan2point(range_, angle_);
-    std::vector<int> nidx;
-    std::vector<double> ndist;
-    if (kdtree_->nearest_neighbors(query_pt, 1, nidx, ndist)) {
-      ICP2D::Point err = query_pt - kdtree_->get_point(nidx[0]);
-      residuals[0] = err.x();
-      residuals[1] = err.y();
-    } else {
-      residuals[0] = 0;
-      residuals[1] = 0;
-    }
-
-    if (jacobian && jacobian[0]) {
-      jacobian[0][0] = 1;
-      jacobian[0][1] = 0;
-      jacobian[0][2] = -range_ * std::sin(angle_ + pose.so2().log());
-      jacobian[0][3] = 0;
-      jacobian[0][4] = 1;
-      jacobian[0][5] = range_ * std::cos(angle_ + pose.so2().log());
-    }
-    return true;
-  }
+                double **jacobian) const override;
 
 private:
   double range_ = 0.0;
   double angle_ = 0.0;
   KDTree<double, 2> *kdtree_;
+};
+
+class ICP2DCeresP2L : public ceres::SizedCostFunction<1, 3> {
+public:
+  ICP2DCeresP2L(const double range, const double angle,
+                KDTree<double, 2> *kdtree)
+      : range_(range), angle_(angle), kdtree_(kdtree) {}
+
+  bool Evaluate(double const *const *params, double *residuals,
+                double **jacobian) const override;
+
+private:
+  double range_ = 0.0;
+  double angle_ = 0.0;
+  KDTree<double, 2> *kdtree_;
+};
+
+class ICP2DCeresP2LMT : public ceres::SizedCostFunction<ceres::DYNAMIC, 3> {
+public:
+  ICP2DCeresP2LMT(std::vector<double> &&ranges, std::vector<double> &&angles,
+                  KDTree<double, 2> *kdtree)
+      : ranges_(std::move(ranges)), angles_(std::move(angles)),
+        kdtree_(kdtree) {
+    set_num_residuals(ranges_.size());
+  }
+  bool Evaluate(double const *const *params, double *residuals,
+                double **jacobian) const override;
+
+private:
+  std::vector<double> ranges_;
+  std::vector<double> angles_;
+  KDTree<double, 2> *kdtree_;
+};
+
+class LikelihoodAlignment : public ceres::SizedCostFunction<1, 3> {
+public:
+  LikelihoodAlignment(LikelihoodField *lf, const Eigen::Vector2d &query_pt_s,
+                      const double range, const double angle)
+      : likelihood_field(lf), query_pt_s_(query_pt_s), range_(range),
+        angle_(angle) {}
+  bool Evaluate(double const *const *params, double *residuals,
+                double **jacobian) const override;
+
+private:
+  LikelihoodField *likelihood_field = nullptr;
+  Eigen::Vector2d query_pt_s_ = Eigen::Vector2d::Zero();
+  double range_ = 0;
+  double angle_ = 0;
 };

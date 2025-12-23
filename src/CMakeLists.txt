@@ -7,9 +7,26 @@ target_link_libraries(visualizer PUBLIC Eigen3::Eigen Sophus::Sophus ${OpenCV_LI
 target_include_directories(visualizer PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)
 
 set(G2O_LIBS fmt ${G2O_CORE_LIBRARY} ${G2O_STUFF_LIBRARY} ${G2O_SOLVER_CSPARSE} ${G2O_SOLVER_CSPARSE_EXTENSION})
-add_library(icp2d icp2d.cpp g2o_types.cpp)
-target_link_libraries(icp2d PUBLIC Eigen3::Eigen Sophus::Sophus ${sensor_msgs_TARGETS} ${G2O_LIBS} ${CERES_LIBRARIES})
+add_library(g2o_types g2o_types.cpp)
+target_link_libraries(g2o_types PUBLIC TBB::tbb Eigen3::Eigen Sophus::Sophus ${sensor_msgs_TARGETS} ${G2O_LIBS} ${OpenCV_LIBRARIES})
+target_include_directories(g2o_types PUBLIC
+    ${CMAKE_SOURCE_DIR}/include/mapping2d
+    ${G2O_INCLUDE_DIR}
+)
+
+add_library(ceres_types ceres_types.cpp)
+target_link_libraries(ceres_types PUBLIC ${CERES_LIBRARIES} TBB::tbb Eigen3::Eigen Sophus::Sophus ${sensor_msgs_TARGETS} ${OpenCV_LIBRARIES})
+target_include_directories(ceres_types PUBLIC
+    ${CMAKE_SOURCE_DIR}/include/mapping2d
+)
+
+add_library(icp2d icp2d.cpp)
+target_link_libraries(icp2d PUBLIC g2o_types ceres_types TBB::tbb Eigen3::Eigen Sophus::Sophus ${sensor_msgs_TARGETS} ${G2O_LIBS} ${CERES_LIBRARIES})
 target_include_directories(icp2d PUBLIC
     ${CMAKE_SOURCE_DIR}/include/mapping2d
     ${G2O_INCLUDE_DIR}
 )
+
+add_library(likelihood_field LikelihoodField.cpp)
+target_link_libraries(likelihood_field PUBLIC ${OpenCV_LIBRARIES} Eigen3::Eigen Sophus::Sophus ${sensor_msgs_TARGETS} ${G2O_LIBS} g2o_types ceres_types)
+target_include_directories(likelihood_field PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)
