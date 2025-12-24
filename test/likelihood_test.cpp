@@ -29,9 +29,9 @@ TEST(Likelihood, DistMap) {
   bag_io
       .AddScan2dHandle("/pavo_scan_bottom",
                        [&scan_obtained, &likelihood_field](
-                           const sensor_msgs::msg::LaserScan &scan) {
+                           std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
                          if (!scan_obtained) {
-                           likelihood_field.set_dist_map(scan);
+                           likelihood_field.set_dist_map(*scan);
                            scan_obtained = true;
                          }
                          return true;
@@ -48,9 +48,9 @@ TEST(Likelihood, LikelihoodField) {
   bag_io
       .AddScan2dHandle("/pavo_scan_bottom",
                        [&scan_obtained, &likelihood_field](
-                           const sensor_msgs::msg::LaserScan &scan) {
+                           std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
                          if (!scan_obtained) {
-                           likelihood_field.set_dist_map(scan);
+                           likelihood_field.set_dist_map(*scan);
                            scan_obtained = true;
                          }
                          return true;
@@ -69,25 +69,25 @@ TEST(Likelihood, ALignBasic) {
   }
   BagIO bag_io(FLAGS_bag_file);
   size_t cnt = 0;
-  sensor_msgs::msg::LaserScan target;
-  sensor_msgs::msg::LaserScan source;
+  std::unique_ptr<sensor_msgs::msg::LaserScan> target;
+  std::unique_ptr<sensor_msgs::msg::LaserScan> source;
   bag_io
-      .AddScan2dHandle(
-          "/pavo_scan_bottom",
-          [&cnt, &target, &source](const sensor_msgs::msg::LaserScan &scan) {
-            if (cnt == 0) {
-              target = scan;
-            } else if (cnt == 1) {
-              source = scan;
-            }
-            cnt++;
-            return true;
-          })
+      .AddScan2dHandle("/pavo_scan_bottom",
+                       [&cnt, &target, &source](
+                           std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
+                         if (cnt == 0) {
+                           target = std::move(scan);
+                         } else if (cnt == 1) {
+                           source = std::move(scan);
+                         }
+                         cnt++;
+                         return true;
+                       })
       .Process();
   LikelihoodField lf(1, 1000, 20, 0.25);
-  lf.set_dist_map(target);
+  lf.set_dist_map(*target);
   Sophus::SE2d pose;
-  EXPECT_TRUE(lf.align(target, source, pose, 10, true, solver_type));
+  EXPECT_TRUE(lf.align(*target, *source, pose, 10, true, solver_type));
   LOG(INFO) << "translation: " << pose.translation().transpose()
             << ", angle: " << pose.so2().log();
   SUCCEED();
@@ -102,33 +102,31 @@ TEST(Likelihood, AlignTest) {
   }
   BagIO bag_io(FLAGS_bag_file);
   LikelihoodField lf(1, 1000, 20, 0.25);
-  sensor_msgs::msg::LaserScan last_scan;
-  bool initialized = false;
+  std::unique_ptr<sensor_msgs::msg::LaserScan> last_scan = nullptr;
   double elapsed = 0;
   size_t cnt = 0;
   bag_io
       .AddScan2dHandle(
           "/pavo_scan_bottom",
-          [&lf, &last_scan, &initialized, &elapsed, &cnt,
-           &solver_type](const sensor_msgs::msg::LaserScan &scan) {
-            if (!initialized) {
-              last_scan = scan;
-              initialized = true;
+          [&lf, &last_scan, &elapsed, &cnt,
+           &solver_type](std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
+            if (!last_scan) {
+              last_scan = std::move(scan);
               return true;
             }
             Sophus::SE2d pose;
             auto start = std::chrono::steady_clock::now();
             EXPECT_TRUE(
-                lf.align(last_scan, scan, pose, 10, false, solver_type));
+                lf.align(*last_scan, *scan, pose, 10, false, solver_type));
             auto end = std::chrono::steady_clock::now();
             elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(
                            end - start)
                            .count();
             cnt++;
             cv::Mat img;
-            Visualizer::Visualize2dScan(last_scan, Sophus::SE2d(), img,
+            Visualizer::Visualize2dScan(*last_scan, Sophus::SE2d(), img,
                                         cv::Vec3b(255, 0, 0), false, 1000, 20);
-            Visualizer::Visualize2dScan(scan, pose, img, cv::Vec3b(0, 0, 255),
+            Visualizer::Visualize2dScan(*scan, pose, img, cv::Vec3b(0, 0, 255),
                                         true, 1000, 20);
             cv::imshow("Ceres likelihood field alignment: " +
                            FLAGS_optimizer_type,
@@ -136,12 +134,12 @@ TEST(Likelihood, AlignTest) {
 
             cv::Mat dist_map = lf.get_dist_map();
             // cv::Mat dist_map = lf.get_likelihood_field();
-            Visualizer::Visualize2dScan(last_scan, Sophus::SE2d(), dist_map,
+            Visualizer::Visualize2dScan(*last_scan, Sophus::SE2d(), dist_map,
                                         cv::Vec3b(255, 0, 0), false, 1000, 20);
             cv::imshow("distance map", dist_map);
 
             cv::waitKey(20);
-            last_scan = scan;
+            last_scan = std::move(scan);
             return true;
           })
       .Process();

@@ -61,20 +61,20 @@ TEST(ICP2DP2LTest, LineFitting) {
 TEST(ICP2DP2LTest, BasicP2L) {
   BagIO bag_io(FLAGS_bag_file);
   size_t cnt = 0;
-  sensor_msgs::msg::LaserScan target;
-  sensor_msgs::msg::LaserScan source;
+  std::unique_ptr<sensor_msgs::msg::LaserScan> target;
+  std::unique_ptr<sensor_msgs::msg::LaserScan> source;
   bag_io
-      .AddScan2dHandle(
-          "/pavo_scan_bottom",
-          [&cnt, &target, &source](sensor_msgs::msg::LaserScan scan) {
-            if (cnt == 0) {
-              target = scan;
-            } else if (cnt == 1) {
-              source = scan;
-            }
-            cnt++;
-            return true;
-          })
+      .AddScan2dHandle("/pavo_scan_bottom",
+                       [&cnt, &target, &source](
+                           std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
+                         if (cnt == 0) {
+                           target = std::move(scan);
+                         } else if (cnt == 1) {
+                           source = std::move(scan);
+                         }
+                         cnt++;
+                         return true;
+                       })
       .Process();
   Sophus::SE2d Tts;
 
@@ -89,7 +89,7 @@ TEST(ICP2DP2LTest, BasicP2L) {
     opt_type = ICP2D::OptimizerType::CeresMT;
   }
 
-  EXPECT_TRUE(ICP2D::P2L(target, source, Tts, 10, true, opt_type));
+  EXPECT_TRUE(ICP2D::P2L(*target, *source, Tts, 10, true, opt_type));
 
   LOG(INFO) << FLAGS_optimizer_type
             << " result translation: " << Tts.translation().transpose()
@@ -100,7 +100,7 @@ TEST(ICP2DP2LTest, BasicP2L) {
 
 TEST(ICP2DP2LTest, VisualP2L) {
   BagIO bag_io(FLAGS_bag_file);
-  sensor_msgs::msg::LaserScan last_scan;
+  std::unique_ptr<sensor_msgs::msg::LaserScan> last_scan;
   bool initialized = false;
 
   // average 13.0629 ms
@@ -126,16 +126,17 @@ TEST(ICP2DP2LTest, VisualP2L) {
       .AddScan2dHandle(
           "/pavo_scan_bottom",
           [&initialized, &last_scan, &opt_type, &win_title, &elapsed,
-           &cnt](sensor_msgs::msg::LaserScan scan) {
+           &cnt](std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
             if (!initialized) {
-              last_scan = scan;
+              last_scan = std::move(scan);
               initialized = true;
               return true;
             }
 
             Sophus::SE2d pose;
             auto start = std::chrono::steady_clock::now();
-            EXPECT_TRUE(ICP2D::P2L(last_scan, scan, pose, 10, false, opt_type));
+            EXPECT_TRUE(
+                ICP2D::P2L(*last_scan, *scan, pose, 10, false, opt_type));
             auto end = std::chrono::steady_clock::now();
             elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(
                            end - start)
@@ -143,13 +144,13 @@ TEST(ICP2DP2LTest, VisualP2L) {
             cnt++;
 
             cv::Mat img;
-            Visualizer::Visualize2dScan(last_scan, Sophus::SE2d(), img,
+            Visualizer::Visualize2dScan(*last_scan, Sophus::SE2d(), img,
                                         cv::Vec3b(255, 0, 0), false);
-            Visualizer::Visualize2dScan(scan, pose, img, cv::Vec3b(0, 0, 255),
+            Visualizer::Visualize2dScan(*scan, pose, img, cv::Vec3b(0, 0, 255),
                                         true);
             cv::imshow(win_title, img);
             cv::waitKey(20);
-            last_scan = scan;
+            last_scan = std::move(scan);
             return true;
           })
       .Process();

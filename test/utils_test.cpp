@@ -13,9 +13,9 @@ TEST(UtilsTest, VisualizerIO) {
   BagIO bag_io(FLAGS_bag_file);
   bag_io
       .AddScan2dHandle("/pavo_scan_bottom",
-                       [](sensor_msgs::msg::LaserScan scan) {
+                       [](std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
                          cv::Mat img;
-                         Visualizer::Visualize2dScan(scan, Sophus::SE2d(), img,
+                         Visualizer::Visualize2dScan(*scan, Sophus::SE2d(), img,
                                                      cv::Vec3b(0, 0, 255));
                          cv::imshow("scan", img);
                          cv::waitKey(20);

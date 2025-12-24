@@ -13,7 +13,8 @@ public:
   BagIO(const std::string &bag_file) : bag_file_(bag_file) {}
   using ProcessFunc = std::function<bool(
       rosbag2_storage::SerializedBagMessageConstSharedPtr msg)>;
-  using Scan2dHandle = std::function<bool(sensor_msgs::msg::LaserScan)>;
+  using Scan2dHandle =
+      std::function<bool(std::unique_ptr<sensor_msgs::msg::LaserScan>)>;
 
   BagIO &AddHandle(const std::string &topic_name, ProcessFunc process_func) {
     process_funcs_.emplace(topic_name, process_func);
@@ -35,7 +36,7 @@ public:
           if (!scan_msg) {
             return false;
           }
-          return func(*scan_msg);
+          return func(std::move(scan_msg));
         });
   }
   void Process();
