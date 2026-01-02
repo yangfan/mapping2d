@@ -142,27 +142,33 @@ void EdgeP2LMT::linearizeOplus() {
 
 void EdgeLikelihood::computeError() {
   VertexSE2 *vertex = static_cast<VertexSE2 *>(_vertices[0]);
+  const Eigen::Vector2d query_pos = vertex->estimate() * measurement();
   const Eigen::Vector2d query_coord =
-      likelihood_field_->resolution() * (vertex->estimate() * measurement()) +
-      likelihood_field_->img_offset() * Eigen::Vector2d::Ones();
-  if (likelihood_field_->outside(query_coord.x(), query_coord.y())) {
-    _error << 0;
+      query_pos * likelihood_field_->resolution() +
+      Eigen::Vector2d(likelihood_field_->img_offset(),
+                      likelihood_field_->img_offset()) -
+      Eigen::Vector2d(0.5, 0.5);
+
+  if (!likelihood_field_->outside(query_coord.x(), query_coord.y(), 10)) {
+
+    _error[0] = likelihood_field_->get_value(query_coord.y(), query_coord.x());
   } else {
-    _error << likelihood_field_->get_value(query_coord.y(), query_coord.x());
+    _error[0] = 0;
+    // setLevel(1);
   }
-  setLevel(1);
 }
 void EdgeLikelihood::linearizeOplus() {
   VertexSE2 *vertex = static_cast<VertexSE2 *>(_vertices[0]);
   const double theta = vertex->estimate().so2().log();
+  const Eigen::Vector2d query_pos = vertex->estimate() * measurement();
   const Eigen::Vector2d query_coord =
-      likelihood_field_->resolution() * (vertex->estimate() * measurement()) +
-      likelihood_field_->img_offset() * Eigen::Vector2d::Ones();
+      query_pos * likelihood_field_->resolution() +
+      Eigen::Vector2d(likelihood_field_->img_offset(),
+                      likelihood_field_->img_offset()) -
+      Eigen::Vector2d(0.5, 0.5);
 
-  if (likelihood_field_->outside(query_coord.x(), query_coord.y())) {
-    _jacobianOplusXi.setZero();
-    // setLevel(1);
-  } else {
+  if (!likelihood_field_->outside(query_coord.x(), query_coord.y(), 10)) {
+
     double grad_x =
         0.5 *
         (likelihood_field_->get_value(query_coord.y(), query_coord.x() + 1) -
@@ -174,8 +180,13 @@ void EdgeLikelihood::linearizeOplus() {
 
     _jacobianOplusXi << likelihood_field_->resolution() * grad_x,
         likelihood_field_->resolution() * grad_y,
-        likelihood_field_->resolution() * range_ *
-            (-grad_x * std::sin(angle_ + theta) +
-             grad_y * std::cos(angle_ + theta));
+        -likelihood_field_->resolution() * grad_x * range_ *
+                std::sin(angle_ + theta) +
+            likelihood_field_->resolution() * grad_y * range_ *
+                std::cos(angle_ + theta);
+
+  } else {
+    _jacobianOplusXi.setZero();
+    // setLevel(1);
   }
 }

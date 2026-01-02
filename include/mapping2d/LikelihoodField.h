@@ -1,5 +1,7 @@
 #pragma once
 
+#include "OGM.h"
+
 #include <Eigen/Core>
 #include <glog/logging.h>
 #include <opencv2/opencv.hpp>
@@ -34,7 +36,11 @@ public:
         max_cell_dist_(1.5 * local_patch_.cell_range), sigma_(sigma),
         dist_map_(img_size, img_size, CV_64FC1, max_cell_dist_) {}
 
+  void reset();
+
   bool set_dist_map(const sensor_msgs::msg::LaserScan &target_scan);
+  bool set_dist_map(const OccupancyGridMap &grid_map);
+
   bool align(const sensor_msgs::msg::LaserScan &target_scan,
              const sensor_msgs::msg::LaserScan &source_scan, Sophus::SE2d &Tts,
              const size_t iterations = 10, const bool verbose = true,
@@ -62,6 +68,30 @@ public:
                    Sophus::SE2d &Tts, const size_t iterations = 10,
                    const bool verbose = true);
 
+  bool scan2map(const sensor_msgs::msg::LaserScan &source_scan,
+                Sophus::SE2d &Tts, const size_t iterations = 10,
+                const bool verbose = true,
+                const SolverType type = SolverType::GN) {
+    switch (type) {
+    case SolverType::GN:
+      return scan2map_GN(source_scan, Tts, iterations, verbose);
+    case SolverType::G2o:
+      return scan2map_G2o(source_scan, Tts, iterations, verbose);
+    case SolverType::Ceres:
+      return scan2map_Ceres(source_scan, Tts, iterations, verbose);
+    }
+    return false;
+  }
+  bool scan2map_G2o(const sensor_msgs::msg::LaserScan &source_scan,
+                    Sophus::SE2d &Tts, const size_t iterations = 10,
+                    const bool verbose = true);
+  bool scan2map_Ceres(const sensor_msgs::msg::LaserScan &source_scan,
+                      Sophus::SE2d &Tts, const size_t iterations = 10,
+                      const bool verbose = true);
+  bool scan2map_GN(const sensor_msgs::msg::LaserScan &source_scan,
+                   Sophus::SE2d &Tts, const size_t iterations = 10,
+                   const bool verbose = true);
+
   cv::Mat get_dist_map() const;
   bool get_dist_map(const std::string file_path) const;
 
@@ -69,6 +99,8 @@ public:
   bool get_likelihood_field(const std::string file_path) const;
 
   // https://en.wikipedia.org/wiki/Bilinear_interpolation
+  // To get accurate value, 0.5 should be subtracted from the image coordinate
+  // so that physical coordinate is consistent with distmap coordinate
   double get_value(double r, double c) const {
     r = std::max(0.0, r);
     r = std::min(double(dist_map_.rows - 1), r);
@@ -85,14 +117,11 @@ public:
 
   int resolution() const { return resolution_; }
   int img_offset() const { return img_offset_; }
+  int img_size() const { return img_size_; }
   const cv::Mat &data() { return dist_map_; }
   int cell_range() const { return local_patch_.cell_range; }
 
-  bool outside(const int x, const int y) const {
-    return x < 0 || x >= dist_map_.cols || y < 0 || y >= dist_map_.rows;
-  }
-
-  bool outside(const double x, const double y, const double boarder) const {
+  bool outside(const double x, const double y, const double boarder = 0) const {
     return x < boarder || x >= dist_map_.cols - boarder || y < boarder ||
            y >= dist_map_.rows - boarder;
   }
@@ -103,12 +132,11 @@ private:
   int img_offset_ = 500;
   int resolution_ = 20; // cell / m
   double max_cell_dist_ = 0;
-  double sigma_ = 0;
+  double sigma_ = 0.25;
   cv::Mat dist_map_;
 
   const int min_valid_ = 20;
   const double robust_kernel_delta = 0.8;
 
-  void reset();
   bool update_dist_map(const Eigen::Vector2i &img_coord);
 };

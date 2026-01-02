@@ -29,4 +29,11 @@ target_include_directories(icp2d PUBLIC
 
 add_library(likelihood_field LikelihoodField.cpp)
 target_link_libraries(likelihood_field PUBLIC ${OpenCV_LIBRARIES} Eigen3::Eigen Sophus::Sophus ${sensor_msgs_TARGETS} ${G2O_LIBS} g2o_types ceres_types)
-target_include_directories(likelihood_field PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)
+target_include_directories(likelihood_field PUBLIC
+    ${CMAKE_SOURCE_DIR}/include/mapping2d
+    ${CMAKE_SOURCE_DIR}/test/src
+)
+
+add_library(map OGM.cpp Submap.cpp Mapper2d.cpp)
+target_link_libraries(map PUBLIC ${OpenCV_LIBRARIES} Eigen3::Eigen Sophus::Sophus likelihood_field visualizer ${sensor_msgs_TARGETS})
+target_include_directories(map PUBLIC ${CMAKE_SOURCE_DIR}/include/mapping2d)

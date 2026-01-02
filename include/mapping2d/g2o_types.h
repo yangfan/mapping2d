@@ -70,7 +70,6 @@ public:
   EdgeP2LMT(std::vector<double> &&ranges, std::vector<double> &&angles)
       : ranges_(std::move(ranges)), angles_(std::move(angles)) {
     setDimension(ranges_.size());
-    // LOG(INFO) << "residual size: " << dimension();
     line_coeffs_ =
         std::vector<Eigen::Vector3d>(ranges_.size(), Eigen::Vector3d::Zero());
     valid_fittings_ = std::vector<bool>(ranges_.size(), false);
@@ -108,7 +107,6 @@ public:
   }
   virtual void computeError() override;
   virtual void linearizeOplus() override;
-  // bool inside(const double r, const double c) const;
 
 private:
   LikelihoodField *likelihood_field_ = nullptr;

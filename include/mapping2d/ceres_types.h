@@ -58,13 +58,13 @@ class LikelihoodAlignment : public ceres::SizedCostFunction<1, 3> {
 public:
   LikelihoodAlignment(LikelihoodField *lf, const Eigen::Vector2d &query_pt_s,
                       const double range, const double angle)
-      : likelihood_field(lf), query_pt_s_(query_pt_s), range_(range),
+      : likelihood_field_(lf), query_pt_s_(query_pt_s), range_(range),
         angle_(angle) {}
   bool Evaluate(double const *const *params, double *residuals,
                 double **jacobian) const override;
 
 private:
-  LikelihoodField *likelihood_field = nullptr;
+  LikelihoodField *likelihood_field_ = nullptr;
   Eigen::Vector2d query_pt_s_ = Eigen::Vector2d::Zero();
   double range_ = 0;
   double angle_ = 0;
