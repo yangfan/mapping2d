@@ -135,6 +135,7 @@ bool LikelihoodAlignment::Evaluate(double const *const *params,
 
   const bool outside_map =
       likelihood_field_->outside(query_coord.x(), query_coord.y(), 10);
+  *is_outlier_ = outside_map;
   if (outside_map) {
     residuals[0] = 0;
   } else {

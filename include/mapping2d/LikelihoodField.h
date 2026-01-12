@@ -41,6 +41,7 @@ public:
   bool set_dist_map(const sensor_msgs::msg::LaserScan &target_scan);
   bool set_dist_map(const OccupancyGridMap &grid_map);
 
+  // scan to scan
   bool align(const sensor_msgs::msg::LaserScan &target_scan,
              const sensor_msgs::msg::LaserScan &source_scan, Sophus::SE2d &Tts,
              const size_t iterations = 10, const bool verbose = true,
@@ -126,6 +127,8 @@ public:
            y >= dist_map_.rows - boarder;
   }
 
+  bool update_dist_map(const Eigen::Vector2i &img_coord);
+
 private:
   LocalPatch local_patch_;
   int img_size_ = 1000;
@@ -137,6 +140,4 @@ private:
 
   const int min_valid_ = 20;
   const double robust_kernel_delta = 0.8;
-
-  bool update_dist_map(const Eigen::Vector2i &img_coord);
 };

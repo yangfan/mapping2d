@@ -19,6 +19,7 @@ public:
   bool add_keyframe(std::shared_ptr<Frame> frame);
   bool scan_match(Frame &frame, const LikelihoodField::SolverType solver_type);
 
+  // copy kf from source to current submap
   bool copy_frames(const Submap &source, const size_t kf_num);
 
   const std::vector<std::shared_ptr<Frame>> &keyframes() const {
@@ -26,17 +27,22 @@ public:
   }
 
   const OccupancyGridMap &grid_map() const { return grid_map_; }
+  OccupancyGridMap &grid_map() { return grid_map_; }
   cv::Mat dist_map() const { return likelihood_field_.get_dist_map(); }
+
   Sophus::SE2d Twl() const { return Twl_; }
+  void set_Twl(const Sophus::SE2d &Twl) { Twl_ = Twl; }
 
   bool has_outsider() const { return grid_map_.has_outsider(); }
-  size_t id() const { return id_; }
+  int id() const { return id_; }
   size_t size() const { return keyframes_.size(); };
+
+  void update_kf_pose_w();
 
 private:
   std::vector<std::shared_ptr<Frame>> keyframes_;
   LikelihoodField likelihood_field_;
   OccupancyGridMap grid_map_;
   Sophus::SE2d Twl_;
-  size_t id_ = 0;
+  int id_ = 0;
 };

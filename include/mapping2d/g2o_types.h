@@ -4,6 +4,7 @@
 #include "LikelihoodField.h"
 
 #include <Eigen/Core>
+#include <g2o/core/base_binary_edge.h>
 #include <g2o/core/base_unary_edge.h>
 #include <g2o/core/base_vertex.h>
 #include <sophus/se2.hpp>
@@ -112,4 +113,19 @@ private:
   LikelihoodField *likelihood_field_ = nullptr;
   double range_ = 0.0;
   double angle_ = 0.0;
+};
+
+class EdgeSubmaps
+    : public g2o::BaseBinaryEdge<3, Sophus::SE2d, VertexSE2, VertexSE2> {
+public:
+  virtual bool read(std::istream &ifs) override {
+    ifs.clear();
+    return false;
+  }
+  virtual bool write(std::ostream &ofs) const override {
+    ofs.clear();
+    return false;
+  }
+  virtual void computeError() override;
+  // virtual void linearizeOplus() override;
 };

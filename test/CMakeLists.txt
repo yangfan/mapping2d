@@ -32,5 +32,13 @@ add_executable(mapper_test mapper_test.cpp)
 target_link_libraries(mapper_test PRIVATE gtest glog::glog ${GFLAGS_LIBRARIES} bag_io visualizer Eigen3::Eigen Sophus::Sophus map)
 target_include_directories(mapper_test PRIVATE ${CMAKE_SOURCE_DIR}/include/mapping2d)
 
+add_executable(loop_closure_test loop_closure_test.cpp)
+target_link_libraries(loop_closure_test gtest glog::glog ${GFLAGS_LIBRARIES} bag_io visualizer Eigen3::Eigen Sophus::Sophus map loop_closure)
+target_include_directories(loop_closure_test PRIVATE ${CMAKE_SOURCE_DIR}/include/mapping2d)
+
+add_executable(ceres_test ceres_test.cpp)
+target_link_libraries(ceres_test ${CERES_LIBRARIES} Eigen3::Eigen Sophus::Sophus map gtest glog::glog)
+target_include_directories(ceres_test PRIVATE ${CMAKE_SOURCE_DIR}/include/mapping2d)
+
 include(GoogleTest)
-gtest_discover_tests(utils_test kd_test icp2d_test)
+gtest_discover_tests(utils_test kd_test icp2d_test ceres_test)

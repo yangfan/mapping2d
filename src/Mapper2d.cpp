@@ -11,12 +11,18 @@ bool Mapper2d::add_scan(std::unique_ptr<sensor_msgs::msg::LaserScan> scan,
   }
   auto frame = std::make_shared<Frame>(std::move(scan));
   if (!last_frame_) {
-    submaps_.emplace_back(submap_dim_, submap_resolution_, distmap_path_size,
-                          likelihood_std, Sophus::SE2d(), 0);
+    submaps_.emplace_back(std::make_unique<Submap>(
+        submap_dim_, submap_resolution_, distmap_path_size, likelihood_std,
+        Sophus::SE2d(), 0));
     cur_submap().initialize(frame);
+    frame->set_kf_id(0);
     last_frame_ = frame;
     last_keyframe_ = frame;
     visualize_kf_ = true;
+
+    if (use_loop_clousure_) {
+      loop_closure_.add_submap(submaps_.back().get());
+    }
     return true;
   }
   frame->set_Tlf(last_frame_->Tlf());
@@ -26,8 +32,13 @@ bool Mapper2d::add_scan(std::unique_ptr<sensor_msgs::msg::LaserScan> scan,
   }
   if (is_keyframe(*frame)) {
     cur_submap().add_keyframe(frame);
+    frame->set_kf_id(last_keyframe_->kf_id() + 1);
     last_keyframe_ = frame;
     visualize_kf_ = true;
+
+    if (use_loop_clousure_) {
+      loop_closure_.process(frame.get());
+    }
   }
   estimated_motion = last_frame_->Twf().inverse() * frame->Twf();
   last_frame_ = frame;
@@ -58,9 +69,19 @@ bool Mapper2d::extend_map() {
                     ".png",
                 grid_map);
   }
-  submaps_.emplace_back(submap_dim_, submap_resolution_, distmap_path_size,
-                        likelihood_std, last_frame_->Twf(), submaps_.size());
-  cur_submap().copy_frames(*(submaps_.rbegin() + 1), win_size_);
+  if (ofs_.is_open()) {
+    ofs_ << cur_submap().id() << " " << cur_submap().Twl().translation().x()
+         << " " << cur_submap().Twl().translation().y() << " "
+         << cur_submap().Twl().so2().log() << std::endl;
+  }
+  submaps_.emplace_back(std::make_unique<Submap>(
+      submap_dim_, submap_resolution_, distmap_path_size, likelihood_std,
+      last_frame_->Twf(), submaps_.size()));
+  cur_submap().copy_frames(**(submaps_.rbegin() + 1), win_size_);
+
+  if (use_loop_clousure_) {
+    loop_closure_.add_submap(submaps_.back().get());
+  }
   return true;
 }
 
@@ -73,7 +94,7 @@ cv::Mat Mapper2d::global_map(const int map_dim) const {
   const double sub_sz = double(submap_dim_) / double(submap_resolution_);
 
   for (const auto &sub : submaps_) {
-    const Eigen::Vector2d pos = sub.Twl().translation();
+    const Eigen::Vector2d pos = sub->Twl().translation();
     const Eigen::Vector2d sub_tl =
         pos - Eigen::Vector2d(0.5 * sub_sz, 0.5 * sub_sz);
     const Eigen::Vector2d sub_br =
@@ -121,7 +142,7 @@ cv::Mat Mapper2d::global_map(const int map_dim) const {
         const Eigen::Vector2d pw = img2world(coord);
 
         for (const auto &sub : submaps_) {
-          const Eigen::Vector2d pl = sub.Twl().inverse() * pw; // in submap
+          const Eigen::Vector2d pl = sub->Twl().inverse() * pw; // in submap
           const Eigen::Vector2i sub_coord =
               (pl * submap_resolution_ +
                0.5 * Eigen::Vector2d(submap_dim_, submap_dim_))
@@ -133,7 +154,7 @@ cv::Mat Mapper2d::global_map(const int map_dim) const {
           }
 
           const uchar value =
-              sub.grid_map().map().at<uchar>(sub_coord.y(), sub_coord.x());
+              sub->grid_map().map().at<uchar>(sub_coord.y(), sub_coord.x());
           if (value > free_th_) {
             global_map.at<cv::Vec3b>(coord.y(), coord.x()) =
                 cv::Vec3b(255, 255, 255);
@@ -150,22 +171,31 @@ cv::Mat Mapper2d::global_map(const int map_dim) const {
     return (pos_w - global_center) * global_resolution + global_img_center;
   };
   for (const auto &sub : submaps_) {
-    const Eigen::Vector2d xaxis = world2img(sub.Twl() * Eigen::Vector2d(1, 0));
-    const Eigen::Vector2d yaxis = world2img(sub.Twl() * Eigen::Vector2d(0, 1));
-    const Eigen::Vector2d origin = world2img(sub.Twl().translation());
+    const Eigen::Vector2d xaxis = world2img(sub->Twl() * Eigen::Vector2d(1, 0));
+    const Eigen::Vector2d yaxis = world2img(sub->Twl() * Eigen::Vector2d(0, 1));
+    const Eigen::Vector2d origin = world2img(sub->Twl().translation());
     cv::line(global_map, cv::Point2d(origin.x(), origin.y()),
              cv::Point2d(xaxis.x(), xaxis.y()), cv::Vec3b(0, 0, 255), 2);
     cv::line(global_map, cv::Point2d(origin.x(), origin.y()),
              cv::Point2d(yaxis.x(), yaxis.y()), cv::Vec3b(255, 0, 0), 2);
-    cv::putText(global_map, std::to_string(sub.id()),
+    cv::putText(global_map, std::to_string(sub->id()),
                 cv::Point2d(origin.x() - 10, origin.y() - 10),
                 cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Vec3b(0, 255, 0));
 
-    for (const auto &kf : sub.keyframes()) {
+    for (const auto &kf : sub->keyframes()) {
       const Eigen::Vector2d kf_coord = world2img(kf->Twf().translation());
       cv::circle(global_map, cv::Point2d(kf_coord.x(), kf_coord.y()), 1,
                  cv::Vec3d(0, 0, 255));
     }
+  }
+
+  for (const auto &[ids, constraint] : loop_closure_.loop_constraints()) {
+    const Eigen::Vector2d sub1 =
+        world2img(submaps_[ids.first]->Twl().translation());
+    const Eigen::Vector2d sub2 =
+        world2img(submaps_[ids.second]->Twl().translation());
+    cv::line(global_map, cv::Point2d(sub1.x(), sub1.y()),
+             cv::Point2d(sub2.x(), sub2.y()), cv::Vec3b(0, 255, 0), 1);
   }
 
   return global_map;
@@ -189,5 +219,5 @@ void Mapper2d::visualize() {
     visualize_kf_ = false;
   }
 
-  cv::waitKey(20);
+  cv::waitKey(10);
 }

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Frame.h"
+#include "LoopClosure.h"
 #include "Submap.h"
 
 class Mapper2d {
@@ -26,10 +27,26 @@ public:
     map_path_ = map_path;
     occupied_th_ = occupied_th;
     free_th_ = free_th;
+    ofs_.open(map_path + "submaps_info.txt");
   };
 
+  void set_loop_closure(const bool use, const std::string &loop_info,
+                        const int min_gap = 1, const double max_dis = 15,
+                        const LikelihoodField::SolverType type =
+                            LikelihoodField::SolverType::G2o) {
+    use_loop_clousure_ = use;
+    if (use_loop_clousure_) {
+      loop_closure_ = LoopClosure(min_gap, max_dis, type);
+      loop_closure_.record_loops(loop_info);
+    }
+  }
+
+  const std::vector<std::unique_ptr<Submap>> &submaps() const {
+    return submaps_;
+  }
+
 private:
-  std::vector<Submap> submaps_;
+  std::vector<std::unique_ptr<Submap>> submaps_;
   std::shared_ptr<Frame> last_frame_ = nullptr;
   std::shared_ptr<Frame> last_keyframe_ = nullptr;
 
@@ -50,9 +67,13 @@ private:
   int occupied_th_ = 127;
   int free_th_ = 127;
   bool visualize_kf_ = false;
+  std::ofstream ofs_;
+
+  bool use_loop_clousure_ = false;
+  LoopClosure loop_closure_;
 
   bool is_keyframe(const Frame &frame) const;
   bool extend_map();
 
-  Submap &cur_submap() { return submaps_.back(); };
+  Submap &cur_submap() { return *submaps_.back(); };
 };

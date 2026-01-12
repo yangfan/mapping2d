@@ -44,7 +44,7 @@ bool LikelihoodField::set_dist_map(const OccupancyGridMap &grid_map) {
   reset();
   for (int r = 0; r < grid_map.map().rows; ++r) {
     for (int c = 0; c < grid_map.map().cols; ++c) {
-      if (grid_map.map().at<uchar>(r, c) < 125 &&
+      if (grid_map.map().at<uchar>(r, c) < 127 &&
           !outside(c, r, local_patch_.cell_range) &&
           dist_map_.at<double>(r, c) > 0.0) {
         update_dist_map(Eigen::Vector2i(c, r));

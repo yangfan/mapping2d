@@ -4,6 +4,10 @@
 #include <execution>
 
 void VertexSE2::oplusImpl(const double *update) {
+  // strictly speaking optimiztion is not performed on SE2 manifold
+  // instead it's on Euclidean space, i.e., a regular vector space
+  // On SE2 manifold it should be update as
+  // _estimate *= update
   Eigen::Map<const Eigen::Vector3d> delta(update);
   _estimate.translation() += delta.head<2>();
   _estimate.so2() = _estimate.so2() * Sophus::SO2d::exp(delta[2]);
@@ -154,7 +158,7 @@ void EdgeLikelihood::computeError() {
     _error[0] = likelihood_field_->get_value(query_coord.y(), query_coord.x());
   } else {
     _error[0] = 0;
-    // setLevel(1);
+    setLevel(1);
   }
 }
 void EdgeLikelihood::linearizeOplus() {
@@ -180,13 +184,20 @@ void EdgeLikelihood::linearizeOplus() {
 
     _jacobianOplusXi << likelihood_field_->resolution() * grad_x,
         likelihood_field_->resolution() * grad_y,
-        -likelihood_field_->resolution() * grad_x * range_ *
-                std::sin(angle_ + theta) +
-            likelihood_field_->resolution() * grad_y * range_ *
-                std::cos(angle_ + theta);
+        likelihood_field_->resolution() * range_ *
+            (-grad_x * std::sin(angle_ + theta) +
+             grad_y * std::cos(angle_ + theta));
 
   } else {
     _jacobianOplusXi.setZero();
-    // setLevel(1);
+    setLevel(1);
   }
+}
+
+void EdgeSubmaps::computeError() {
+  VertexSE2 *vertex0 = static_cast<VertexSE2 *>(_vertices[0]);
+  VertexSE2 *vertex1 = static_cast<VertexSE2 *>(_vertices[1]);
+  _error = (vertex0->estimate().inverse() * vertex1->estimate() *
+            measurement().inverse())
+               .log();
 }

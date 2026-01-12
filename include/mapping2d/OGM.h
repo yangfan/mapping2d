@@ -25,6 +25,7 @@ public:
   cv::Mat binary_map(const int occupied_threshold = 117,
                      const int free_threshold = 137) const;
   cv::Mat map() const { return map_; };
+  void set_map(cv::Mat map) { map_ = map.clone(); };
 
   bool inside(const int r, const int c) const;
   bool has_outsider() const { return outsider_; };

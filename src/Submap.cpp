@@ -6,6 +6,7 @@ bool Submap::initialize(std::shared_ptr<Frame> frame) {
 
   frame->set_Tlf(Sophus::SE2d());
   frame->set_Twf(Sophus::SE2d());
+  frame->set_local_pose(id_, frame->Tlf());
 
   grid_map_.add_frame(*frame);
   likelihood_field_.set_dist_map(grid_map_);
@@ -23,6 +24,7 @@ bool Submap::copy_frames(const Submap &source, const size_t kf_num) {
        fid < source.keyframes_.size(); ++fid) {
     auto keyframe = source.keyframes_[fid];
     keyframe->set_Tlf(Twl_.inverse() * keyframe->Twf());
+    keyframe->set_local_pose(id_, keyframe->Tlf());
     grid_map_.add_frame(*keyframe);
     keyframes_.emplace_back(keyframe);
   }
@@ -36,6 +38,7 @@ bool Submap::add_keyframe(std::shared_ptr<Frame> frame) {
   grid_map_.add_frame(*frame);
   likelihood_field_.set_dist_map(grid_map_);
   keyframes_.emplace_back(frame);
+  frame->set_local_pose(id_, frame->Tlf());
   return true;
 }
 
@@ -53,4 +56,10 @@ bool Submap::scan_match(Frame &frame,
   frame.set_Twf(Twl_ * frame.Tlf());
 
   return true;
+}
+
+void Submap::update_kf_pose_w() {
+  for (const auto &frame : keyframes_) {
+    frame->set_Twf(Twl_ * frame->local_pose(id_));
+  }
 }

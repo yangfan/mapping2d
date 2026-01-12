@@ -1,5 +1,6 @@
 #pragma once
 #include <ceres/ceres.h>
+#include <sophus/ceres_manifold.hpp>
 #include <sophus/se2.hpp>
 
 #include <vector>
@@ -59,13 +60,34 @@ public:
   LikelihoodAlignment(LikelihoodField *lf, const Eigen::Vector2d &query_pt_s,
                       const double range, const double angle)
       : likelihood_field_(lf), query_pt_s_(query_pt_s), range_(range),
-        angle_(angle) {}
+        angle_(angle), is_outlier_(new bool(false)) {}
   bool Evaluate(double const *const *params, double *residuals,
                 double **jacobian) const override;
+  bool is_outlier() const { return *is_outlier_; }
 
 private:
   LikelihoodField *likelihood_field_ = nullptr;
   Eigen::Vector2d query_pt_s_ = Eigen::Vector2d::Zero();
   double range_ = 0;
   double angle_ = 0;
+  std::unique_ptr<bool> is_outlier_;
+};
+
+struct SE2EdgeCost {
+  SE2EdgeCost(const Sophus::SE2d &m, const Eigen::Matrix3d &sqrt_info_mat)
+      : T12(m), sqrt_info(sqrt_info_mat) {}
+  template <typename T>
+  bool operator()(const T *const data1, const T *const data2,
+                  T *residual) const {
+    Eigen::Map<const Sophus::SE2<T>> vertex1(data1);
+    Eigen::Map<const Sophus::SE2<T>> vertex2(data2);
+    Eigen::Map<typename Sophus::SE2<T>::Tangent> err(residual);
+    err =
+        sqrt_info.template cast<T>() *
+        (vertex1.inverse() * vertex2 * T12.inverse().template cast<T>()).log();
+    return true;
+  }
+
+  Sophus::SE2d T12;
+  Eigen::Matrix3d sqrt_info = Eigen::Matrix3d::Identity();
 };
