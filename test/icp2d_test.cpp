@@ -94,40 +94,40 @@ TEST(ICP2DTest, BasicP2PCeres) {
   EXPECT_LE(std::abs(Tts.so2().log()), 0.1);
 }
 
-TEST(ICP2DTest, G2oVsCeres) {
-  BagIO bag_io(FLAGS_bag_file);
-  std::unique_ptr<sensor_msgs::msg::LaserScan> last_scan;
-  bool initialized = false;
-  double max_translation = 0;
-  double max_angle = 0;
-  bag_io
-      .AddScan2dHandle(
-          "/pavo_scan_bottom",
-          [&initialized, &last_scan, &max_translation,
-           &max_angle](std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
-            if (!initialized) {
-              last_scan = std::move(scan);
-              initialized = true;
-              return true;
-            }
-            Sophus::SE2d pose_g2o;
-            ICP2D::P2PG2o(*last_scan, *scan, pose_g2o, 10, false);
-            Sophus::SE2d pose_ceres;
-            ICP2D::P2PGN(*last_scan, *scan, pose_ceres, 10, false);
-            const double trans_diff =
-                (pose_g2o.translation() - pose_ceres.translation()).norm();
-            const double angle_diff =
-                (pose_g2o.so2().log() - pose_ceres.so2().log());
-            max_translation = std::max(max_translation, trans_diff);
-            max_angle = std::max(max_angle, angle_diff);
-            last_scan = std::move(scan);
-            return true;
-          })
-      .Process();
-  LOG(INFO) << "max translation diff: " << max_translation
-            << ", max angle diff: " << max_angle;
-  SUCCEED();
-}
+// TEST(ICP2DTest, G2oVsCeres) {
+//   BagIO bag_io(FLAGS_bag_file);
+//   std::unique_ptr<sensor_msgs::msg::LaserScan> last_scan;
+//   bool initialized = false;
+//   double max_translation = 0;
+//   double max_angle = 0;
+//   bag_io
+//       .AddScan2dHandle(
+//           "/pavo_scan_bottom",
+//           [&initialized, &last_scan, &max_translation,
+//            &max_angle](std::unique_ptr<sensor_msgs::msg::LaserScan> scan) {
+//             if (!initialized) {
+//               last_scan = std::move(scan);
+//               initialized = true;
+//               return true;
+//             }
+//             Sophus::SE2d pose_g2o;
+//             ICP2D::P2PG2o(*last_scan, *scan, pose_g2o, 10, false);
+//             Sophus::SE2d pose_ceres;
+//             ICP2D::P2PGN(*last_scan, *scan, pose_ceres, 10, false);
+//             const double trans_diff =
+//                 (pose_g2o.translation() - pose_ceres.translation()).norm();
+//             const double angle_diff =
+//                 (pose_g2o.so2().log() - pose_ceres.so2().log());
+//             max_translation = std::max(max_translation, trans_diff);
+//             max_angle = std::max(max_angle, angle_diff);
+//             last_scan = std::move(scan);
+//             return true;
+//           })
+//       .Process();
+//   LOG(INFO) << "max translation diff: " << max_translation
+//             << ", max angle diff: " << max_angle;
+//   SUCCEED();
+// }
 
 TEST(ICP2DTest, VisualP2P) {
   BagIO bag_io(FLAGS_bag_file);

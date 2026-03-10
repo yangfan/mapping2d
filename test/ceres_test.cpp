@@ -197,15 +197,15 @@ TEST(Ceres, SE2Graph) {
   ceres::Problem problem;
   constexpr int knum_v = 100;
   constexpr double sigma = 0.5;
-  // const double sigma = 0.5;
   std::mt19937 rng(2026);
   std::normal_distribution<double> gauss;
 
-  std::vector<Sophus::SE2d, Eigen::aligned_allocator<double>> vertices(knum_v);
-  std::vector<Sophus::SE2d, Eigen::aligned_allocator<double>>
+  std::vector<Sophus::SE2d, Eigen::aligned_allocator<Sophus::SE2d>> vertices(
+      knum_v);
+  std::vector<Sophus::SE2d, Eigen::aligned_allocator<Sophus::SE2d>>
       vertices_estimated(knum_v);
-  // vertices.reserve(knum_v);
-  // vertices_estimated.reserve(knum_v);
+  // std::vector<Sophus::SE2d> vertices(knum_v);
+  // std::vector<Sophus::SE2d> vertices_estimated(knum_v);
 
   auto random_delta = [&rng, &gauss]() {
     Sophus::SE2d::Tangent twist;
@@ -216,7 +216,11 @@ TEST(Ceres, SE2Graph) {
   };
 
   auto *manifold = new Sophus::Manifold<Sophus::SE2>;
-  for (int i = 0; i < knum_v; ++i) {
+  vertices_estimated[0] = vertices[0];
+  problem.AddParameterBlock(vertices_estimated[0].data(),
+                            Sophus::SE2d::num_parameters, manifold);
+  problem.SetParameterBlockConstant(vertices_estimated[0].data());
+  for (int i = 1; i < knum_v; ++i) {
     vertices[i] = Sophus::SE2d::sampleUniform(rng);
     vertices_estimated[i] = vertices[i] * random_delta();
     problem.AddParameterBlock(vertices_estimated[i].data(),
@@ -240,6 +244,10 @@ TEST(Ceres, SE2Graph) {
   ceres::Solver::Summary summary;
   ceres::Solve(opts, &problem, &summary);
   LOG(INFO) << summary.FullReport();
+  for (int i = 0; i < knum_v; ++i) {
+    EXPECT_NEAR(vertices_estimated[i].log().norm(), vertices[i].log().norm(),
+                1e-5);
+  }
 }
 
 int main(int argc, char **argv) {

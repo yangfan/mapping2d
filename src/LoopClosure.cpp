@@ -187,8 +187,8 @@ bool LoopClosure::optimize_Ceres() {
 
   ceres::Problem problem;
 
-  std::vector<Sophus::SE2d, Eigen::aligned_allocator<double>> submap_poses(
-      submaps_.size());
+  std::vector<Sophus::SE2d, Eigen::aligned_allocator<Sophus::SE2d>>
+      submap_poses(submaps_.size());
 
   // consecutive edges
   auto *manifold = new Sophus::Manifold<Sophus::SE2>;
